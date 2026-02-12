@@ -9,6 +9,8 @@ import { useBandi } from '@/hooks/useBandi';
 import { formattaData, testoScadenza, getUrgenza } from '@/lib/utils/dates';
 import { getColoreSettore, getColoreUrgenza } from '@/lib/utils/colors';
 
+export const dynamic = 'force-dynamic';
+
 export default function ListaBandiPage() {
   const { bandi, isLoading, error } = useBandi();
   const searchParams = useSearchParams();
