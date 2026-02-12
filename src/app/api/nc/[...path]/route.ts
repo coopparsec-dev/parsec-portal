@@ -24,10 +24,7 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> }
 ) {
-  // In Next.js 16, params è una Promise che va awaited
   const params = await context.params;
-  
-  // Ricostruisce il percorso da /api/nc/ocs/v1/... → http://nextcloud/ocs/v1/...
   const ncPath = params.path.join('/');
   const searchParams = request.nextUrl.searchParams.toString();
   const url = `${NC_URL}/${ncPath}${searchParams ? '?' + searchParams : ''}`;
@@ -39,14 +36,12 @@ export async function GET(
       method: 'GET',
       headers: {
         'Authorization': getAuthHeader(),
-        'OCS-APIRequest': 'true', // Header obbligatorio per API Nextcloud
+        'OCS-APIRequest': 'true',
         'Accept': 'application/json',
       },
     });
 
-    // Legge la risposta
     const data = await response.json();
-    
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     console.error('❌ Errore proxy GET:', error);
@@ -58,40 +53,97 @@ export async function GET(
 }
 
 /**
- * Handler POST - Per ricerca, upload, ecc.
+ * Handler POST - Per ricerca, upload, PROPFIND (via header X-Method)
  */
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> }
 ) {
-  // In Next.js 16, params è una Promise che va awaited
   const params = await context.params;
-  
   const ncPath = params.path.join('/');
-  const url = `${NC_URL}/${ncPath}`;
+  const searchParams = request.nextUrl.searchParams.toString();
+  const url = `${NC_URL}/${ncPath}${searchParams ? '?' + searchParams : ''}`;
 
-  console.log('📤 Proxy POST:', url);
+  const isPropfind = request.headers.get('X-Method') === 'PROPFIND';
+  const method = isPropfind ? 'PROPFIND' : 'POST';
+
+  console.log(`🔍 Proxy ${method}:`, url);
 
   try {
-    // Legge il body della richiesta
+    const headers: Record<string, string> = {
+      'Authorization': getAuthHeader(),
+      'OCS-APIRequest': 'true',
+    };
+
+    if (isPropfind) {
+      headers['Content-Type'] = 'application/xml';
+      headers['Depth'] = request.headers.get('Depth') || '1';
+    } else {
+      headers['Accept'] = 'application/json';
+    }
+
+    // Leggi il body della richiesta (se presente)
+    const body = isPropfind ? await request.text() : undefined;
+
+    const response = await fetch(url, {
+      method,
+      headers,
+      body,
+    });
+
+    if (isPropfind) {
+      const data = await response.text();
+      return new Response(data, {
+        status: response.status,
+        headers: {
+          'Content-Type': 'application/xml',
+        },
+      });
+    } else {
+      const data = await response.json();
+      return NextResponse.json(data, { status: response.status });
+    }
+  } catch (error) {
+    console.error(`❌ Errore proxy ${method}:`, error);
+    return NextResponse.json(
+      { error: 'Errore connessione Nextcloud' },
+      { status: 502 }
+    );
+  }
+}
+
+/**
+ * Handler PATCH - Per aggiornamenti parziali
+ */
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> }
+) {
+  const params = await context.params;
+  const ncPath = params.path.join('/');
+  const searchParams = request.nextUrl.searchParams.toString();
+  const url = `${NC_URL}/${ncPath}${searchParams ? '?' + searchParams : ''}`;
+
+  console.log('🔍 Proxy PATCH:', url);
+
+  try {
     const body = await request.text();
 
     const response = await fetch(url, {
-      method: 'POST',
+      method: 'PATCH',
       headers: {
         'Authorization': getAuthHeader(),
         'OCS-APIRequest': 'true',
+        'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Content-Type': request.headers.get('Content-Type') || 'application/json',
       },
-      body: body,
+      body,
     });
 
     const data = await response.json();
-    
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error('❌ Errore proxy POST:', error);
+    console.error('❌ Errore proxy PATCH:', error);
     return NextResponse.json(
       { error: 'Errore connessione Nextcloud' },
       { status: 502 }

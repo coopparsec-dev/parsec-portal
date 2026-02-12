@@ -1,0 +1,248 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+import Link from 'next/link';
+import { useBandi } from '@/hooks/useBandi';
+import { formattaData, testoScadenza, getUrgenza } from '@/lib/utils/dates';
+import { getColoreSettore, getColoreUrgenza } from '@/lib/utils/colors';
+
+export default function ListaBandiPage() {
+  const { bandi, isLoading, error } = useBandi();
+  
+  // Filtri
+  const [filtroDaFare, setFiltroDaFare] = useState<boolean | null>(null);
+  const [filtroSettore, setFiltroSettore] = useState<string>('Tutti');
+
+  // Lista settori unici per il dropdown
+  const settoriUnici = useMemo(() => {
+    const settori = new Set(bandi.map(b => b.settore).filter(Boolean));
+    return Array.from(settori).sort();
+  }, [bandi]);
+
+  // Bandi filtrati
+  const bandiFiltrati = useMemo(() => {
+    return bandi.filter(bando => {
+      // Filtro "Da fare"
+      if (filtroDaFare !== null && bando.daFare !== filtroDaFare) {
+        return false;
+      }
+      
+      // Filtro settore
+      if (filtroSettore !== 'Tutti' && bando.settore !== filtroSettore) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [bandi, filtroDaFare, filtroSettore]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <h1 className="text-3xl font-bold mb-6">Tutti i Bandi</h1>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="animate-pulse space-y-4">
+              {[1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="h-20 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <h1 className="text-3xl font-bold mb-6">Tutti i Bandi</h1>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <p className="text-red-800">Errore nel caricamento dei bandi</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold mb-2">Tutti i Bandi</h1>
+          <p className="text-gray-600">
+            {bandiFiltrati.length} bandi 
+            {filtroDaFare !== null || filtroSettore !== 'Tutti' ? ' (filtrati)' : ' totali'}
+          </p>
+        </div>
+
+        {/* Filtri */}
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-4">Filtri</h2>
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Filtro Da Fare */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Da fare
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setFiltroDaFare(null)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    filtroDaFare === null
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Tutti
+                </button>
+                <button
+                  onClick={() => setFiltroDaFare(true)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    filtroDaFare === true
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  ✓ Da fare
+                </button>
+                <button
+                  onClick={() => setFiltroDaFare(false)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    filtroDaFare === false
+                      ? 'bg-gray-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Non prioritari
+                </button>
+              </div>
+            </div>
+
+            {/* Filtro Settore */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Settore
+              </label>
+              <select
+                value={filtroSettore}
+                onChange={(e) => setFiltroSettore(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="Tutti">Tutti i settori</option>
+                {settoriUnici.map(settore => (
+                  <option key={settore} value={settore}>
+                    {settore}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Lista Bandi */}
+        <div className="bg-white rounded-lg shadow">
+          {bandiFiltrati.length === 0 ? (
+            <div className="p-6 text-center text-gray-500">
+              Nessun bando trovato con i filtri selezionati
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {bandiFiltrati.map(bando => {
+                const urgenza = getUrgenza(bando.scadenza);
+                const coloreUrgenza = getColoreUrgenza(urgenza);
+                const coloreSettore = getColoreSettore(bando.settore);
+
+                return (
+                  <Link
+                    key={bando.id}
+                    href={`/bandi/${bando.id}`}
+                    className="block p-6 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex gap-4">
+                      {/* Colonna sinistra: Semaforo + Da Fare */}
+                      <div className="flex flex-col items-center gap-2 pt-1">
+                        {/* Semaforo urgenza */}
+                        <div 
+                          className={`w-4 h-4 rounded-full ${coloreUrgenza}`}
+                          title={urgenza}
+                        ></div>
+                        
+                        {/* Badge Da Fare */}
+                        {bando.daFare && (
+                          <span className="text-xs px-2 py-1 rounded font-medium bg-green-100 text-green-800">
+                            ✓
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Colonna centrale: Info bando */}
+                      <div className="flex-1 min-w-0">
+                        {/* Titolo */}
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2 hover:text-blue-600">
+                          {bando.titolo}
+                        </h3>
+
+                        {/* Riga info */}
+                        <div className="flex flex-wrap items-center gap-2 text-sm mb-2">
+                          {/* Tag settore */}
+                          {bando.settore && (
+                            <span className={`px-3 py-1 rounded-full border ${coloreSettore}`}>
+                              {bando.settore}
+                            </span>
+                          )}
+
+                          {/* Committente */}
+                          {bando.committente && (
+                            <span className="text-gray-600">
+                              {bando.committente}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Budget */}
+                        {(bando.budgetComplessivo || bando.massimaleBudget) && (
+                          <div className="text-sm text-gray-600">
+                            {bando.budgetComplessivo && (
+                              <span>Budget: {bando.budgetComplessivo}</span>
+                            )}
+                            {bando.budgetComplessivo && bando.massimaleBudget && (
+                              <span className="mx-2">•</span>
+                            )}
+                            {bando.massimaleBudget && (
+                              <span>Massimale: {bando.massimaleBudget}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Colonna destra: Scadenza */}
+                      <div className="text-right">
+                        {bando.scadenza ? (
+                          <>
+                            <div className="text-sm font-medium text-gray-900">
+                              {formattaData(bando.scadenza)}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {testoScadenza(bando.scadenza)}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-sm text-gray-500">
+                            Nessuna scadenza
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
